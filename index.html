@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RRG Dashboard — Sector & Stock Rotation</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,500;0,700;1,500&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #020617; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
+  #loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+  #loading .title { font-family: 'Fraunces', serif; font-style: italic; font-size: 28px; color: #10b981; }
+  #loading .sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 2px; color: #64748b; }
+  .font-display { font-family: 'Fraunces', serif; }
+  .font-mono { font-family: 'JetBrains Mono', monospace; }
+  .panel { background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(148, 163, 184, 0.15); border-radius: 12px; backdrop-filter: blur(8px); }
+  .btn { transition: all 0.15s ease; }
+  .btn:hover { transform: translateY(-1px); }
+  .quad-pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 1.5px; font-family: 'JetBrains Mono', monospace; }
+  .input-base { padding: 8px 12px; background: rgba(2,6,23,0.6); border: 1px solid rgba(148,163,184,0.2); border-radius: 6px; color: #e2e8f0; font-size: 12px; font-family: 'JetBrains Mono', monospace; outline: none; }
+  .input-base:focus { border-color: #10b981; }
+  textarea.input-base { line-height: 1.5; resize: vertical; }
+  @media (max-width: 900px) { .main-grid { grid-template-columns: 1fr !important; } }
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="title">Cargando dashboard…</div>
+  <div class="sub">COMPILANDO REACT · UNOS SEGUNDOS</div>
+</div>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo } = React;
+
+// =====================================================================
+// localStorage adapter (replaces window.storage from Claude artifact env)
+// =====================================================================
+window.storage = {
+  async get(key) {
+    const v = localStorage.getItem(key);
+    return v !== null ? { value: v } : null;
+  },
+  async set(key, value) {
+    localStorage.setItem(key, value);
+    return { key, value };
+  },
+  async delete(key) {
+    localStorage.removeItem(key);
+    return { key, deleted: true };
+  },
+};
+
+// =====================================================================
+// Icon components (inline SVG, replace lucide-react)
+// =====================================================================
+const mkIcon = (paths) => ({ size = 24, color = 'currentColor', style }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+       fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+    {paths}
+  </svg>
+);
+const RefreshCw   = mkIcon(<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>);
+const Settings    = mkIcon(<><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></>);
+const AlertCircle = mkIcon(<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>);
+const Plus        = mkIcon(<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>);
+const X           = mkIcon(<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>);
+const Info        = mkIcon(<><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></>);
+const Activity    = mkIcon(<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>);
+const ChevronDown = mkIcon(<polyline points="6 9 12 15 18 9"/>);
+const ChevronUp   = mkIcon(<polyline points="18 15 12 9 6 15"/>);
+const Clipboard   = mkIcon(<><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></>);
+const Check       = mkIcon(<polyline points="20 6 9 17 4 12"/>);
+const Copy        = mkIcon(<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>);
+
+// =====================================================================
+// Config
+// =====================================================================
+const BENCHMARK = 'SPY';
+const DATA_VERSION = 'v3-paste';
+
+// URL de la Web App de Google Apps Script que sirve el JSON.
+// El dashboard la consulta solo al abrir y trae los datos frescos.
+// Si algún día querés volver a la carga manual, dejá esto como '' (vacío).
+const REMOTE_DATA_URL = 'https://script.google.com/macros/s/AKfycbzYEixkMV5E4Zm7RUcqOejndboyFOamG-M4cHp-jQL3Fdd7_PlSEW77X1Wn0rRLFIciiA/exec';
+
+const DEFAULT_SECTORS = [
+  // SPDR sectoriales (11 sectores S&P 500)
+  { symbol: 'XLK',  name: 'Technology' },
+  { symbol: 'XLF',  name: 'Financials' },
+  { symbol: 'XLV',  name: 'Healthcare' },
+  { symbol: 'XLE',  name: 'Energy' },
+  { symbol: 'XLY',  name: 'Cons. Discretionary' },
+  { symbol: 'XLP',  name: 'Cons. Staples' },
+  { symbol: 'XLI',  name: 'Industrials' },
+  { symbol: 'XLB',  name: 'Materials' },
+  { symbol: 'XLU',  name: 'Utilities' },
+  { symbol: 'XLRE', name: 'Real Estate' },
+  { symbol: 'XLC',  name: 'Communications' },
+  // ETFs temáticos
+  { symbol: 'IGV',  name: 'Software' },
+  { symbol: 'ETHA', name: 'Ethereum Spot' },
+  { symbol: 'IBIT', name: 'Bitcoin Spot' },
+  { symbol: 'WGMI', name: 'Bitcoin Miners' },
+  { symbol: 'CONY', name: 'COIN YieldMax' },
+  // Metales
+  { symbol: 'GLD',  name: 'Gold' },
+  { symbol: 'GDX',  name: 'Gold Miners' },
+  { symbol: 'COPX', name: 'Copper Miners' },
+];
+
+const DEFAULT_STOCKS = [
+  // Mega caps USA
+  { symbol: 'NVDA', name: 'NVIDIA' },
+  { symbol: 'AAPL', name: 'Apple' },
+  { symbol: 'MSFT', name: 'Microsoft' },
+  { symbol: 'AMZN', name: 'Amazon' },
+  { symbol: 'TSLA', name: 'Tesla' },
+  // Tu cartera personal
+  { symbol: 'MSTR', name: 'MicroStrategy' },
+  { symbol: 'OKLO', name: 'Oklo' },
+  { symbol: 'NOW',  name: 'ServiceNow' },
+  { symbol: 'IREN', name: 'IREN' },
+  { symbol: 'ASTS', name: 'AST SpaceMobile' },
+  { symbol: 'CRWV', name: 'CoreWeave' },
+  // LatAm
+  { symbol: 'MELI', name: 'MercadoLibre' },
+  { symbol: 'NU',   name: 'Nu Holdings' },
+  // Sugeridos por el grupo (03/06/2026)
+  { symbol: 'META', name: 'Meta' },
+  { symbol: 'PLTR', name: 'Palantir' },
+  { symbol: 'LLY',  name: 'Eli Lilly' },
+  { symbol: 'CAT',  name: 'Caterpillar' },
+  { symbol: 'MU',   name: 'Micron' },
+  { symbol: 'MDT',  name: 'Medtronic' },
+  { symbol: 'IBM',  name: 'IBM' },
+  { symbol: 'HIMS', name: 'Hims & Hers' },
+  { symbol: 'ASML', name: 'ASML' },
+  { symbol: 'SMH',  name: 'Semis ETF (VanEck)' },
+  { symbol: 'QTUM', name: 'Quantum ETF (Defiance)' },
+  { symbol: 'EWY',  name: 'Corea del Sur (iShares)' },
+  { symbol: 'BTC-USD', name: 'Bitcoin' },
+];
+
+// Info de cada SPDR Sector ETF: nombre, qué cubre, top 5 holdings
+const SECTOR_INFO = {
+  XLK:  { name: 'Technology',             desc: 'Software, semiconductores, hardware',           top: ['AAPL', 'MSFT', 'NVDA', 'AVGO', 'ORCL'] },
+  XLF:  { name: 'Financials',             desc: 'Bancos, seguros, mercados de capitales',         top: ['BRK.B', 'JPM', 'V', 'MA', 'BAC'] },
+  XLV:  { name: 'Healthcare',             desc: 'Pharma, biotech, equipos médicos',               top: ['LLY', 'UNH', 'JNJ', 'ABBV', 'MRK'] },
+  XLE:  { name: 'Energy',                 desc: 'Petróleo, gas, servicios energéticos',           top: ['XOM', 'CVX', 'COP', 'EOG', 'WMB'] },
+  XLY:  { name: 'Consumer Discretionary', desc: 'Retail, autos, viajes, restaurantes',            top: ['AMZN', 'TSLA', 'HD', 'MCD', 'BKNG'] },
+  XLP:  { name: 'Consumer Staples',       desc: 'Consumo defensivo: alimentos, bebidas, hogar',   top: ['COST', 'WMT', 'PG', 'KO', 'PEP'] },
+  XLI:  { name: 'Industrials',            desc: 'Aeroespacial, defensa, transporte, maquinaria',  top: ['GE', 'RTX', 'BA', 'CAT', 'HON'] },
+  XLB:  { name: 'Materials',              desc: 'Químicos, metales, minería, packaging',          top: ['LIN', 'SHW', 'ECL', 'APD', 'FCX'] },
+  XLU:  { name: 'Utilities',              desc: 'Servicios públicos (luz, agua, gas)',            top: ['NEE', 'SO', 'DUK', 'CEG', 'AEP'] },
+  XLRE: { name: 'Real Estate',            desc: 'REITs (data centers, logística, salud, retail)', top: ['PLD', 'AMT', 'EQIX', 'WELL', 'SPG'] },
+  XLC:  { name: 'Communications',         desc: 'Big tech de internet, media, telecom',           top: ['META', 'GOOGL', 'GOOG', 'NFLX', 'VZ'] },
+  // ETFs temáticos adicionales
+  IGV:  { name: 'Software (iShares)',     desc: 'Software puro, sin hardware ni semis. Más concentrado que XLK', top: ['MSFT', 'ORCL', 'CRM', 'ADBE', 'NOW'] },
+  ETHA: { name: 'Ethereum Spot (iShares)', desc: 'Exposición spot a ETH vía ETF de BlackRock',     top: ['ETH spot'] },
+  IBIT: { name: 'Bitcoin Spot (iShares)', desc: 'Exposición spot a BTC vía ETF de BlackRock. El más líquido', top: ['BTC spot'] },
+  WGMI: { name: 'Bitcoin Miners (Valkyrie)', desc: 'Mineros de Bitcoin cotizando en USA. Apalanca movimientos de BTC', top: ['MARA', 'CLSK', 'RIOT', 'IREN', 'CIFR'] },
+  CONY: { name: 'COIN YieldMax (covered call)', desc: 'Genera ingreso vendiendo calls sobre COIN. Yield alto, sacrificás upside',  top: ['COIN options'] },
+  // Metales
+  GLD:  { name: 'Gold (SPDR)',            desc: 'Oro físico en bóvedas. Refugio clásico, hedge contra inflación y crisis', top: ['Gold spot'] },
+  GDX:  { name: 'Gold Miners (VanEck)',   desc: 'Mineras de oro globales. Apalanca el movimiento del oro hacia arriba y abajo', top: ['NEM', 'AEM', 'GOLD', 'WPM', 'FNV'] },
+  COPX: { name: 'Copper Miners (Global X)', desc: 'Mineras de cobre globales. Termómetro de demanda industrial y transición energética', top: ['SCCO', 'FCX', 'BHP', 'TECK', 'ANTO'] },
+  // Países
+  EWY:  { name: 'Corea del Sur (iShares)', desc: 'Acciones grandes y medianas de Corea. Muy cargado en semis (Samsung, SK Hynix); proxy del ciclo de memorias y del mercado coreano', top: ['Samsung Elec', 'SK Hynix', 'Samsung Bio', 'Hyundai', 'LG Energy'] },
+};
+
+const TICKER_COLORS = [
+  '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+  '#ec4899', '#14b8a6', '#f97316', '#a855f7', '#22c55e',
+  '#3b82f6', '#eab308', '#f43f5e', '#0ea5e9', '#84cc16',
+  '#d946ef', '#2dd4bf', '#fb923c', '#60a5fa', '#a3e635',
+  '#e879f9', '#34d399', '#fbbf24', '#f87171', '#c084fc',
+];
+
+const QUADRANTS = {
+  LEADING:   { color: '#10b981', label: 'LIDERANDO' },
+  IMPROVING: { color: '#06b6d4', label: 'MEJORANDO' },
+  WEAKENING: { color: '#f59e0b', label: 'DEBILITANDO' },
+  LAGGING:   { color: '#ef4444', label: 'REZAGADO' },
+};
+
+// =====================================================================
+// Math
+// =====================================================================
+function getQuadrant(rsRatio, rsMomentum) {
+  if (rsRatio >= 100 && rsMomentum >= 100) return 'LEADING';
+  if (rsRatio < 100  && rsMomentum >= 100) return 'IMPROVING';
+  if (rsRatio < 100  && rsMomentum < 100)  return 'LAGGING';
+  return 'WEAKENING';
+}
+
+function calculateRRG(assetPrices, benchmarkPrices, smoothing = 10, momPeriod = 5) {
+  if (!assetPrices || !benchmarkPrices) return null;
+  const len = Math.min(assetPrices.length, benchmarkPrices.length);
+  const pairs = [];
+  for (let i = 0; i < len; i++) {
+    if (assetPrices[i] != null && benchmarkPrices[i] != null) {
+      pairs.push({ a: assetPrices[i], b: benchmarkPrices[i] });
+    }
+  }
+  if (pairs.length < smoothing + momPeriod + 1) return null;
+
+  const n = pairs.length;
+  const rs = pairs.map(p => (p.a / p.b) * 100);
+  const sma = new Array(n).fill(null);
+  for (let i = smoothing - 1; i < n; i++) {
+    let s = 0;
+    for (let j = i - smoothing + 1; j <= i; j++) s += rs[j];
+    sma[i] = s / smoothing;
+  }
+  const rsRatio = rs.map((v, i) => sma[i] != null ? 100 + ((v / sma[i]) - 1) * 100 : null);
+  const rsMomentum = rsRatio.map((v, i) => {
+    if (v == null || i < momPeriod || rsRatio[i - momPeriod] == null) return null;
+    return 100 + ((v / rsRatio[i - momPeriod]) - 1) * 100;
+  });
+  const series = [];
+  for (let i = 0; i < n; i++) {
+    if (rsRatio[i] != null && rsMomentum[i] != null) {
+      series.push({ index: i, rsRatio: rsRatio[i], rsMomentum: rsMomentum[i] });
+    }
+  }
+  return series;
+}
+
+function parsePastedData(text) {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error('Pegá el JSON antes de importar.');
+  const cleaned = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  let parsed;
+  try { parsed = JSON.parse(cleaned); }
+  catch (e) { throw new Error('JSON inválido: ' + e.message); }
+  if (!parsed.weekEnding || !Array.isArray(parsed.weekEnding)) throw new Error('Falta el array "weekEnding".');
+  if (!parsed.prices || typeof parsed.prices !== 'object') throw new Error('Falta el objeto "prices".');
+  if (!parsed.prices[BENCHMARK]) throw new Error('Falta ' + BENCHMARK + ' en "prices" (es el benchmark obligatorio).');
+  const n = parsed.weekEnding.length;
+  Object.entries(parsed.prices).forEach(([sym, arr]) => {
+    if (!Array.isArray(arr)) throw new Error('prices.' + sym + ' no es un array.');
+    if (arr.length !== n) throw new Error('prices.' + sym + ' tiene ' + arr.length + ' valores pero weekEnding tiene ' + n + '.');
+  });
+  return parsed;
+}
+
+// =====================================================================
+// RRG Chart (SVG)
+// =====================================================================
+function RRGChart({ rrgData, hoveredSymbol, onHover, pinned = [], onTogglePin, onClearPins, quadrantFilter = 'ALL', showAllLabels = true }) {
+  const W = 820, H = 780;
+  const M = { top: 60, right: 60, bottom: 60, left: 70 };
+  const iw = W - M.left - M.right;
+  const ih = H - M.top - M.bottom;
+
+  const allR = [], allM = [];
+  rrgData.forEach(t => { if (t.tail) t.tail.forEach(p => { allR.push(p.rsRatio); allM.push(p.rsMomentum); }); });
+  if (allR.length === 0) { allR.push(99, 101); allM.push(99, 101); }
+
+  // Bounds: simétrico centrado en 100 cuando es TODOS,
+  // asimétrico (zoom al cuadrante) cuando hay filtro.
+  let xMin, xMax, yMin, yMax;
+  if (quadrantFilter === 'ALL') {
+    const rPad = Math.max(Math.max(...allR) - 100, 100 - Math.min(...allR), 0.5) * 1.25;
+    const mPad = Math.max(Math.max(...allM) - 100, 100 - Math.min(...allM), 0.5) * 1.25;
+    xMin = 100 - rPad; xMax = 100 + rPad;
+    yMin = 100 - mPad; yMax = 100 + mPad;
+  } else {
+    const rMax = Math.max(...allR), rMin = Math.min(...allR);
+    const mMax = Math.max(...allM), mMin = Math.min(...allM);
+    const xPad = Math.max((rMax - rMin) * 0.18, 0.4);
+    const yPad = Math.max((mMax - mMin) * 0.18, 0.4);
+    if (quadrantFilter === 'LEADING') {
+      xMin = Math.min(99.6, rMin - xPad); xMax = rMax + xPad;
+      yMin = Math.min(99.6, mMin - yPad); yMax = mMax + yPad;
+    } else if (quadrantFilter === 'IMPROVING') {
+      xMin = rMin - xPad; xMax = Math.max(100.4, rMax + xPad);
+      yMin = Math.min(99.6, mMin - yPad); yMax = mMax + yPad;
+    } else if (quadrantFilter === 'WEAKENING') {
+      xMin = Math.min(99.6, rMin - xPad); xMax = rMax + xPad;
+      yMin = mMin - yPad; yMax = Math.max(100.4, mMax + yPad);
+    } else { // LAGGING
+      xMin = rMin - xPad; xMax = Math.max(100.4, rMax + xPad);
+      yMin = mMin - yPad; yMax = Math.max(100.4, mMax + yPad);
+    }
+  }
+  const xs = v => M.left + ((v - xMin) / (xMax - xMin)) * iw;
+  const ys = v => M.top  + (1 - (v - yMin) / (yMax - yMin)) * ih;
+  const cx = xs(100), cy = ys(100);
+
+  const labelOffsets = useMemo(() => {
+    // Cada etiqueta busca su posición probando un "anillo" de candidatos
+    // (varios ángulos × varias distancias) y se queda con la que MENOS
+    // se pisa con etiquetas ya puestas, con los puntos, y con los bordes.
+    const LH = 13;                 // alto aprox de la etiqueta
+    const radii = [13, 19, 26, 34, 44];                       // distancias al punto
+    const angles = [0, -28, 28, -58, 58, -90, 90, -125, 125, 155, -155, 180]; // grados
+    const placed = [];             // bounding boxes ya ubicados
+    const dots = rrgData.filter(t => t.current).map(t => ({
+      x: xs(t.current.rsRatio), y: ys(t.current.rsMomentum)
+    }));
+    // Ordenar de afuera hacia adentro: los puntos del cluster central se ubican
+    // último, así empujan sus etiquetas hacia los huecos que quedaron libres.
+    const order = rrgData
+      .map((t, i) => ({ t, i }))
+      .filter(o => o.t.current)
+      .sort((a, b) => {
+        const da = Math.hypot(xs(a.t.current.rsRatio) - cx, ys(a.t.current.rsMomentum) - cy);
+        const db = Math.hypot(xs(b.t.current.rsRatio) - cx, ys(b.t.current.rsMomentum) - cy);
+        return db - da;
+      });
+    const out = {};
+    order.forEach(({ t }) => {
+      const px = xs(t.current.rsRatio);
+      const py = ys(t.current.rsMomentum);
+      const halfW = Math.max(t.symbol.length * 3.4, 10);
+      let best = null, bestScore = Infinity;
+      for (const r of radii) {
+        for (const a of angles) {
+          const rad = a * Math.PI / 180;
+          const dx = Math.cos(rad) * r;
+          const dy = Math.sin(rad) * r * 0.72;   // achatado en vertical
+          const lx = px + dx, ly = py + dy;
+          const anchorStart = dx >= 0;
+          const x1 = anchorStart ? lx - 2 : lx - 2 * halfW;
+          const x2 = anchorStart ? lx + 2 * halfW : lx + 2;
+          const y1 = ly - LH / 2, y2 = ly + LH / 2;
+          let score = r * 0.55;                  // preferir cerca del punto
+          for (const p of placed) {              // pisar otra etiqueta = caro
+            const ox = Math.min(x2, p.x2) - Math.max(x1, p.x1);
+            const oy = Math.min(y2, p.y2) - Math.max(y1, p.y1);
+            if (ox > 0 && oy > 0) score += 55 + ox * oy * 0.05;
+          }
+          for (const d of dots) {                // tapar un punto = medio caro
+            if (Math.abs(d.x - px) < 0.5 && Math.abs(d.y - py) < 0.5) continue;
+            if (d.x > x1 - 3 && d.x < x2 + 3 && d.y > y1 - 3 && d.y < y2 + 3) score += 22;
+          }
+          // salirse del recuadro del gráfico
+          if (x1 < M.left || x2 > M.left + iw || y1 < M.top || y2 > M.top + ih) score += 70;
+          if (score < bestScore) { bestScore = score; best = { dx, dy, x1, x2, y1, y2, r }; }
+        }
+      }
+      placed.push({ x1: best.x1, x2: best.x2, y1: best.y1, y2: best.y2 });
+      out[t.symbol] = { dx: best.dx, dy: best.dy, leader: best.r >= 26 };
+    });
+    return out;
+  }, [rrgData, xMin, xMax, yMin, yMax]);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', fontFamily: 'JetBrains Mono, monospace' }}>
+      <defs>
+        <radialGradient id="bgGrad" cx="50%" cy="50%" r="60%">
+          <stop offset="0%" stopColor="#0f172a"/>
+          <stop offset="100%" stopColor="#020617"/>
+        </radialGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <rect x="0" y="0" width={W} height={H} fill="url(#bgGrad)" onClick={() => onClearPins && onClearPins()} style={{ cursor: pinned.length ? 'pointer' : 'default' }}/>
+      <rect x={M.left} y={M.top} width={cx - M.left} height={cy - M.top} fill="rgba(6,182,212,0.04)"/>
+      <rect x={cx} y={M.top} width={M.left + iw - cx} height={cy - M.top} fill="rgba(16,185,129,0.04)"/>
+      <rect x={M.left} y={cy} width={cx - M.left} height={M.top + ih - cy} fill="rgba(239,68,68,0.04)"/>
+      <rect x={cx} y={cy} width={M.left + iw - cx} height={M.top + ih - cy} fill="rgba(245,158,11,0.04)"/>
+
+      {[xMin, (xMin + 100) / 2, 100, (100 + xMax) / 2, xMax].map((v, i) => (
+        <line key={'gx' + i} x1={xs(v)} y1={M.top} x2={xs(v)} y2={M.top + ih} stroke="rgba(148,163,184,0.06)" strokeWidth="1"/>
+      ))}
+      {[yMin, (yMin + 100) / 2, 100, (100 + yMax) / 2, yMax].map((v, i) => (
+        <line key={'gy' + i} x1={M.left} y1={ys(v)} x2={M.left + iw} y2={ys(v)} stroke="rgba(148,163,184,0.06)" strokeWidth="1"/>
+      ))}
+
+      <line x1={cx} y1={M.top} x2={cx} y2={M.top + ih} stroke="rgba(148,163,184,0.35)" strokeWidth="1" strokeDasharray="3 4"/>
+      <line x1={M.left} y1={cy} x2={M.left + iw} y2={cy} stroke="rgba(148,163,184,0.35)" strokeWidth="1" strokeDasharray="3 4"/>
+      <rect x={M.left} y={M.top} width={iw} height={ih} fill="none" stroke="rgba(148,163,184,0.25)" strokeWidth="1"/>
+
+      <text x={M.left + 12} y={M.top + 24} fill="#06b6d4" fontSize="12" fontWeight="700" letterSpacing="2" opacity="0.7">MEJORANDO</text>
+      <text x={M.left + iw - 12} y={M.top + 24} fill="#10b981" fontSize="12" fontWeight="700" letterSpacing="2" textAnchor="end" opacity="0.85">LIDERANDO</text>
+      <text x={M.left + 12} y={M.top + ih - 12} fill="#ef4444" fontSize="12" fontWeight="700" letterSpacing="2" opacity="0.7">REZAGADO</text>
+      <text x={M.left + iw - 12} y={M.top + ih - 12} fill="#f59e0b" fontSize="12" fontWeight="700" letterSpacing="2" textAnchor="end" opacity="0.75">DEBILITANDO</text>
+      <text x={M.left + iw / 2} y={H - 18} fill="#94a3b8" fontSize="11" textAnchor="middle" letterSpacing="2">RS-RATIO  →  ¿más fuerte que el SPY?</text>
+      <text x={20} y={M.top + ih / 2} fill="#94a3b8" fontSize="11" textAnchor="middle" letterSpacing="2" transform={`rotate(-90, 20, ${M.top + ih / 2})`}>RS-MOMENTUM  →  ¿acelera o frena?</text>
+
+      {[xMin, (xMin + 100) / 2, 100, (100 + xMax) / 2, xMax].map((v, i) => (
+        <text key={'tx' + i} x={xs(v)} y={M.top + ih + 18} fill="#64748b" fontSize="10" textAnchor="middle">{v.toFixed(1)}</text>
+      ))}
+      {[yMin, (yMin + 100) / 2, 100, (100 + yMax) / 2, yMax].map((v, i) => (
+        <text key={'ty' + i} x={M.left - 10} y={ys(v) + 3} fill="#64748b" fontSize="10" textAnchor="end">{v.toFixed(1)}</text>
+      ))}
+
+      {rrgData.map(t => {
+        if (!t.tail || t.tail.length === 0) return null;
+        const isPinned = pinned.includes(t.symbol);
+        const isActive = isPinned || hoveredSymbol === t.symbol;
+        const anyActive = pinned.length > 0 || !!hoveredSymbol;
+        const dim = anyActive && !isActive;
+        const opacity = dim ? 0.12 : 1;
+        const tailPoints = t.tail.map(p => xs(p.rsRatio) + ',' + ys(p.rsMomentum)).join(' ');
+        const off = labelOffsets[t.symbol] || { dx: 12, dy: 4, leader: false };
+        const px = xs(t.current.rsRatio);
+        const py = ys(t.current.rsMomentum);
+        const anchor = off.dx < -1 ? 'end' : (Math.abs(off.dx) <= 1 ? 'middle' : 'start');
+        const showLabel = showAllLabels || isActive;
+        // Dirección de viaje: del penúltimo punto de la cola al actual
+        const prev = t.tail.length >= 2 ? t.tail[t.tail.length - 2] : null;
+        let arrowAng = null;
+        if (prev) {
+          const dx = px - xs(prev.rsRatio), dy = py - ys(prev.rsMomentum);
+          if (Math.hypot(dx, dy) > 1.2) arrowAng = Math.atan2(dy, dx) * 180 / Math.PI;
+        }
+        return (
+          <g key={t.symbol} opacity={opacity}
+             onMouseEnter={() => onHover(t.symbol)} onMouseLeave={() => onHover(null)}
+             onClick={(e) => { e.stopPropagation(); onTogglePin && onTogglePin(t.symbol); }}
+             style={{ cursor: 'pointer' }}>
+            <polyline points={tailPoints} fill="none" stroke={t.color} strokeWidth={isPinned ? 2.2 : 1.5} opacity={isPinned ? 0.75 : 0.5} strokeLinecap="round" strokeLinejoin="round"/>
+            {t.tail.slice(0, -1).map((p, i) => (
+              <circle key={i} cx={xs(p.rsRatio)} cy={ys(p.rsMomentum)} r="2.3" fill={t.color} opacity={0.25 + 0.55 * (i / Math.max(t.tail.length - 1, 1))}/>
+            ))}
+            <circle cx={px} cy={py} r="8" fill={t.color} opacity="0.22" filter="url(#glow)"/>
+            {isPinned && (
+              <circle cx={px} cy={py} r="9.5" fill="none" stroke="#f8fafc" strokeWidth="1.5" opacity="0.9"/>
+            )}
+            <circle cx={px} cy={py} r="5" fill={t.color} stroke="#0f172a" strokeWidth="1.5"/>
+            {arrowAng !== null && (
+              <g transform={`translate(${px},${py}) rotate(${arrowAng})`}>
+                <polygon points="13,0 5,-4.5 5,4.5" fill={t.color} stroke="#0f172a" strokeWidth="0.75" strokeLinejoin="round"/>
+              </g>
+            )}
+            {showLabel && off.leader && (
+              <line x1={px} y1={py} x2={px + off.dx} y2={py + off.dy}
+                    stroke={t.color} strokeWidth="0.75" opacity="0.4"/>
+            )}
+            {showLabel && (
+              <text x={px + off.dx} y={py + off.dy + 3.5} fill="#e2e8f0" fontSize="11" fontWeight={isPinned ? 700 : 600} textAnchor={anchor}
+                    style={{ paintOrder: 'stroke', stroke: '#0f172a', strokeWidth: 3, strokeLinejoin: 'round' }}>
+                {t.symbol}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// =====================================================================
+// Main Dashboard
+// =====================================================================
+function RRGDashboard() {
+  const [view, setView] = useState('sectors');
+  const [sectors, setSectors] = useState(DEFAULT_SECTORS);
+  const [stocks, setStocks] = useState(DEFAULT_STOCKS);
+  const [newTicker, setNewTicker] = useState('');
+  const [priceData, setPriceData] = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [error, setError] = useState(null);
+  const [tailLength, setTailLength] = useState(8);
+  const [smoothing, setSmoothing] = useState(10);
+  const [momPeriod, setMomPeriod] = useState(5);
+  const [hoveredSymbol, setHoveredSymbol] = useState(null);
+  const [pinned, setPinned] = useState([]);
+  const togglePin = (sym) => setPinned(p => p.includes(sym) ? p.filter(s => s !== sym) : [...p, sym]);
+  const clearPins = () => setPinned([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showMethodology, setShowMethodology] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [showPaste, setShowPaste] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [copyOk, setCopyOk] = useState(false);
+  const [resumenOk, setResumenOk] = useState(false);
+  const [chartQuadrant, setChartQuadrant] = useState('ALL');
+  const [showAllLabels, setShowAllLabels] = useState(true);
+
+  const activeTickers = view === 'sectors' ? sectors : stocks;
+
+  useEffect(() => { setChartQuadrant('ALL'); setPinned([]); }, [view]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const s = await window.storage.get('rrg-sectors');
+        if (s?.value) {
+          const stored = JSON.parse(s.value);
+          // Mergear: arrancamos con los defaults y agregamos cualquier ticker custom guardado
+          const symbols = new Set(DEFAULT_SECTORS.map(t => t.symbol));
+          const merged = [...DEFAULT_SECTORS, ...stored.filter(t => !symbols.has(t.symbol))];
+          setSectors(merged);
+        }
+      } catch (e) {}
+      try {
+        const s = await window.storage.get('rrg-stocks');
+        if (s?.value) {
+          const stored = JSON.parse(s.value);
+          const symbols = new Set(DEFAULT_STOCKS.map(t => t.symbol));
+          const merged = [...DEFAULT_STOCKS, ...stored.filter(t => !symbols.has(t.symbol))];
+          setStocks(merged);
+        }
+      } catch (e) {}
+      try {
+        const s = await window.storage.get('rrg-price-data');
+        if (s?.value) {
+          const parsed = JSON.parse(s.value);
+          if (parsed.version === DATA_VERSION) {
+            setPriceData(parsed.data); setLastUpdate(parsed.timestamp);
+          }
+        }
+      } catch (e) {}
+      try {
+        const s = await window.storage.get('rrg-settings');
+        if (s?.value) {
+          const cfg = JSON.parse(s.value);
+          if (cfg.tailLength) setTailLength(cfg.tailLength);
+          if (cfg.smoothing)  setSmoothing(cfg.smoothing);
+          if (cfg.momPeriod)  setMomPeriod(cfg.momPeriod);
+        }
+      } catch (e) {}
+      setLoaded(true);
+    })();
+  }, []);
+
+  useEffect(() => { if (loaded) try { window.storage?.set?.('rrg-sectors', JSON.stringify(sectors)); } catch (e) {} }, [sectors, loaded]);
+  useEffect(() => { if (loaded) try { window.storage?.set?.('rrg-stocks', JSON.stringify(stocks)); } catch (e) {} }, [stocks, loaded]);
+  useEffect(() => { if (loaded) try { window.storage?.set?.('rrg-settings', JSON.stringify({ tailLength, smoothing, momPeriod })); } catch (e) {} }, [tailLength, smoothing, momPeriod, loaded]);
+
+  // Trae los datos solos desde la Web App al abrir el dashboard.
+  useEffect(() => {
+    if (!REMOTE_DATA_URL) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const sep = REMOTE_DATA_URL.includes('?') ? '&' : '?';
+        const resp = await fetch(REMOTE_DATA_URL + sep + 't=' + Date.now());
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = parsePastedData(await resp.text());
+        if (cancel) return;
+        setPriceData(data);
+        const ts = (data._meta && data._meta.generatedAt) ? data._meta.generatedAt : new Date().toISOString();
+        setLastUpdate(ts);
+        try {
+          await window.storage?.set?.('rrg-price-data',
+            JSON.stringify({ version: DATA_VERSION, data, timestamp: ts }));
+        } catch (e) {}
+      } catch (e) {
+        if (!cancel) console.warn('Data remota no disponible:', e.message);
+      }
+    })();
+    return () => { cancel = true; };
+  }, []);
+
+  const rrgData = useMemo(() => {
+    if (!priceData?.prices?.[BENCHMARK]) return [];
+    const bench = priceData.prices[BENCHMARK];
+    return activeTickers.map((t, idx) => {
+      const prices = priceData.prices[t.symbol];
+      const color = TICKER_COLORS[idx % TICKER_COLORS.length];
+      if (!prices) return { ...t, missing: true, color };
+      const series = calculateRRG(prices, bench, smoothing, momPeriod);
+      if (!series || series.length === 0) return { ...t, missing: true, color };
+      const tail = series.slice(-tailLength);
+      const current = tail[tail.length - 1];
+      return { ...t, color, tail, current, quadrant: getQuadrant(current.rsRatio, current.rsMomentum) };
+    });
+  }, [priceData, activeTickers, tailLength, smoothing, momPeriod]);
+
+  const validRrgData = rrgData.filter(t => !t.missing);
+  const missingTickers = rrgData.filter(t => t.missing).map(t => t.symbol);
+
+  const grouped = useMemo(() => {
+    const g = { LEADING: [], IMPROVING: [], WEAKENING: [], LAGGING: [] };
+    validRrgData.forEach(t => g[t.quadrant].push(t));
+    return g;
+  }, [validRrgData]);
+
+  const chartData = useMemo(() => {
+    if (chartQuadrant === 'ALL') return validRrgData;
+    return validRrgData.filter(t => t.quadrant === chartQuadrant);
+  }, [validRrgData, chartQuadrant]);
+
+  const importPasted = async () => {
+    setError(null);
+    try {
+      const data = parsePastedData(pasteText);
+      setPriceData(data);
+      const ts = (data._meta && data._meta.generatedAt) ? data._meta.generatedAt : new Date().toISOString();
+      setLastUpdate(ts);
+      try { await window.storage?.set?.('rrg-price-data', JSON.stringify({ version: DATA_VERSION, data, timestamp: ts })); } catch (e) {}
+      setPasteText(''); setShowPaste(false);
+    } catch (e) { setError(e.message || 'Error parseando los datos'); }
+  };
+
+  const allRequestedTickers = useMemo(() => {
+    const set = new Set([BENCHMARK, ...sectors.map(s => s.symbol), ...stocks.map(s => s.symbol)]);
+    return Array.from(set);
+  }, [sectors, stocks]);
+
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText('Actualizame los cierres semanales para el RRG. Tickers: ' + allRequestedTickers.join(', ') + '. Devolvelo en el formato JSON exacto que espera el dashboard.');
+      setCopyOk(true);
+      setTimeout(() => setCopyOk(false), 2000);
+    } catch (e) {}
+  };
+
+  const copyResumen = async () => {
+    const order = ['LEADING', 'IMPROVING', 'WEAKENING', 'LAGGING'];
+    const emoji = { LEADING: '🟢', IMPROVING: '🔵', WEAKENING: '🟡', LAGGING: '🔴' };
+    const head = `📊 RRG · ${view === 'sectors' ? 'SECTORES' : 'STOCKS'} vs ${BENCHMARK}\n${priceData?.weekEnding?.length || 0} semanas · ${formatTimestamp(lastUpdate)}`;
+    const blocks = order.map(q => {
+      const list = grouped[q];
+      const title = `${emoji[q]} ${QUADRANTS[q].label} (${list.length})`;
+      if (!list.length) return title + '\n—';
+      const sorted = [...list].sort((a, b) => b.current.rsRatio - a.current.rsRatio);
+      const lines = sorted.map(t => `• ${t.symbol}  ${t.current.rsRatio.toFixed(1)} · ${t.current.rsMomentum.toFixed(1)}`);
+      return title + '\n' + lines.join('\n');
+    });
+    const text = head + '\n\n' + blocks.join('\n\n') + '\n\n(RS-Ratio · RS-Momentum)';
+    try {
+      await navigator.clipboard.writeText(text);
+      setResumenOk(true);
+      setTimeout(() => setResumenOk(false), 2000);
+    } catch (e) {}
+  };
+
+  const addTicker = () => {
+    const sym = newTicker.trim().toUpperCase();
+    if (!sym) return;
+    const list = view === 'sectors' ? sectors : stocks;
+    if (list.find(t => t.symbol === sym)) return;
+    (view === 'sectors' ? setSectors : setStocks)([...list, { symbol: sym, name: sym }]);
+    setNewTicker('');
+  };
+  const removeTicker = sym => {
+    if (view === 'sectors') setSectors(sectors.filter(t => t.symbol !== sym));
+    else setStocks(stocks.filter(t => t.symbol !== sym));
+  };
+  const resetTickers = () => {
+    if (view === 'sectors') setSectors(DEFAULT_SECTORS);
+    else setStocks(DEFAULT_STOCKS);
+  };
+  const formatTimestamp = ts => {
+    if (!ts) return 'nunca';
+    const d = new Date(ts);
+    return d.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(ellipse at top, #0f172a 0%, #020617 100%)', color: '#e2e8f0', fontFamily: 'Inter, sans-serif', padding: '24px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <div className="font-mono" style={{ fontSize: 11, color: '#64748b', letterSpacing: 3, marginBottom: 4 }}>RELATIVE ROTATION GRAPH</div>
+            <h1 className="font-display" style={{ fontSize: 36, fontWeight: 500, lineHeight: 1, margin: 0, fontStyle: 'italic' }}>
+              Sector & Stock <span style={{ color: '#10b981' }}>Rotation</span>
+            </h1>
+            <div className="font-mono" style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+              vs {BENCHMARK} · {priceData?.weekEnding?.length || 0} semanas · última actualización: <span style={{ color: '#94a3b8' }}>{lastUpdate ? formatTimestamp(lastUpdate) + ' hs (ARG)' : 'sin datos aún'}</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {validRrgData.length > 0 && (
+              <button onClick={copyResumen} className="btn font-mono"
+                title="Copiar resumen por cuadrante (formato WhatsApp)"
+                style={{ padding: '10px 16px', background: 'rgba(16,185,129,0.12)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, fontWeight: 700, fontSize: 12, letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                {resumenOk ? <Check size={14}/> : <Copy size={14}/>}
+                {resumenOk ? 'COPIADO' : 'COPIAR RESUMEN'}
+              </button>
+            )}
+            <button onClick={() => { setShowPaste(true); setError(null); }} className="btn font-mono"
+              style={{ padding: '10px 16px', background: '#10b981', color: '#022c22', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <Clipboard size={14}/> PEGAR DATOS
+            </button>
+            <button onClick={() => setShowSettings(!showSettings)} className="btn font-mono"
+              style={{ padding: '10px 14px', background: 'rgba(15,23,42,0.8)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontWeight: 600, fontSize: 12, letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <Settings size={14}/>
+            </button>
+          </div>
+        </div>
+
+        {showPaste && (
+          <div className="panel" style={{ padding: 20, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div className="font-mono" style={{ fontSize: 11, letterSpacing: 2, color: '#94a3b8', fontWeight: 700 }}>IMPORTAR DATOS</div>
+              <button onClick={() => { setShowPaste(false); setError(null); setPasteText(''); }} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex' }}>
+                <X size={16}/>
+              </button>
+            </div>
+            <div style={{ background: 'rgba(6,182,212,0.05)', border: '1px solid rgba(6,182,212,0.2)', borderRadius: 8, padding: 14, marginBottom: 12 }}>
+              <div className="font-mono" style={{ fontSize: 10, color: '#06b6d4', letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>CÓMO OBTENER DATOS FRESCOS</div>
+              <ol style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: '#cbd5e1', lineHeight: 1.7 }}>
+                <li>Corré el Google Apps Script <span className="font-mono" style={{ color: '#10b981' }}>fetchRRGData</span> que te dio Claude</li>
+                <li>Abrí el archivo <span className="font-mono" style={{ color: '#10b981' }}>rrg_data.json</span> en tu Drive</li>
+                <li>Copiá todo el contenido (Ctrl+A, Ctrl+C)</li>
+                <li>Pegalo abajo y click IMPORTAR</li>
+              </ol>
+              <button onClick={copyPrompt} className="btn font-mono"
+                style={{ marginTop: 10, padding: '6px 10px', background: 'rgba(6,182,212,0.15)', color: '#06b6d4', border: '1px solid rgba(6,182,212,0.3)', borderRadius: 6, fontWeight: 600, fontSize: 10, letterSpacing: 1, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {copyOk ? <Check size={11}/> : <Copy size={11}/>}
+                {copyOk ? 'COPIADO' : 'COPIAR LISTA DE TICKERS'}
+              </button>
+            </div>
+            <label className="font-mono" style={{ fontSize: 10, color: '#64748b', letterSpacing: 1.5, display: 'block', marginBottom: 6 }}>JSON</label>
+            <textarea value={pasteText} onChange={e => setPasteText(e.target.value)}
+              placeholder={'{\n  "weekEnding": ["2026-01-23", ...],\n  "prices": {\n    "SPY": [567.12, ...],\n    "XLK": [...]\n  }\n}'}
+              className="input-base" rows={10} style={{ width: '100%', fontSize: 11 }}/>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+              <button onClick={() => setPasteText('')} className="btn font-mono"
+                style={{ padding: '8px 14px', background: 'transparent', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 6, fontWeight: 600, fontSize: 11, letterSpacing: 1.5, cursor: 'pointer' }}>
+                LIMPIAR
+              </button>
+              <button onClick={importPasted} className="btn font-mono"
+                style={{ padding: '8px 16px', background: '#10b981', color: '#022c22', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, letterSpacing: 1.5, cursor: 'pointer' }}>
+                IMPORTAR
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="panel" style={{ padding: 16, marginBottom: 16, borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }}/>
+              <div>
+                <div className="font-mono" style={{ fontSize: 11, color: '#fca5a5', letterSpacing: 2, fontWeight: 700, marginBottom: 4 }}>ERROR</div>
+                <div style={{ fontSize: 13, color: '#fecaca' }}>{error}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showSettings && (
+          <div className="panel" style={{ padding: 20, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+              <div className="font-mono" style={{ fontSize: 11, letterSpacing: 2, color: '#94a3b8', fontWeight: 700 }}>PARÁMETROS</div>
+              <button
+                onClick={() => { setTailLength(8); setSmoothing(10); setMomPeriod(5); }}
+                className="btn font-mono"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 10, letterSpacing: 1.5, cursor: 'pointer' }}
+                title="Restaurar valores originales: Tail 8 · Smoothing 10 · Momentum 5">
+                <RefreshCw size={12}/>
+                RESTAURAR POR DEFECTO
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24 }}>
+              {[
+                {
+                  label: 'TAIL LENGTH', es: 'Largo del rastro', val: tailLength, set: setTailLength, def: 8, min: 3, max: 13,
+                  desc: 'Cuántas semanas hacia atrás se dibujan como cola detrás de cada ticker. Más largo muestra la trayectoria completa; más corto, sólo el movimiento reciente.'
+                },
+                {
+                  label: 'SMOOTHING', es: 'Suavizado (SMA del RS)', val: smoothing, set: setSmoothing, def: 10, min: 5, max: 20,
+                  desc: 'Período del promedio móvil que filtra el ruido de la fuerza relativa. Más alto = señales más confiables pero lentas. Más bajo = más reactivo pero con falsas alarmas.'
+                },
+                {
+                  label: 'MOMENTUM', es: 'Momento (período del ROC)', val: momPeriod, set: setMomPeriod, def: 5, min: 2, max: 10,
+                  desc: 'Mide si la fuerza relativa acelera o frena, comparando con el valor de hace N semanas. Más alto = tendencia de mediano plazo. Más bajo = capta cambios rápidos pero es más volátil.'
+                },
+              ].map(p => {
+                const isDefault = p.val === p.def;
+                return (
+                  <div key={p.label}>
+                    <label className="font-mono" style={{ fontSize: 10, color: '#64748b', letterSpacing: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8 }}>
+                      <span>{p.label} · {p.val} semanas</span>
+                      <span style={{ fontSize: 9, color: isDefault ? '#10b981' : '#475569', letterSpacing: 1 }}>
+                        {isDefault ? '✓ DEFAULT' : `DEF: ${p.def}`}
+                      </span>
+                    </label>
+                    <input type="range" min={p.min} max={p.max} value={p.val} onChange={e => p.set(+e.target.value)} style={{ width: '100%', accentColor: '#10b981' }}/>
+                    <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 6, fontWeight: 600 }}>{p.es}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>{p.desc}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 4, padding: 4, background: 'rgba(15,23,42,0.5)', borderRadius: 10, marginBottom: 16, width: 'fit-content', border: '1px solid rgba(148,163,184,0.15)' }}>
+          {[
+            { id: 'sectors', label: 'SECTOR ETFs', count: sectors.length },
+            { id: 'stocks', label: 'STOCKS', count: stocks.length },
+          ].map(opt => (
+            <button key={opt.id} onClick={() => setView(opt.id)} className="font-mono"
+              style={{ padding: '8px 16px', background: view === opt.id ? '#10b981' : 'transparent', color: view === opt.id ? '#022c22' : '#94a3b8', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 11, letterSpacing: 1.5, cursor: 'pointer' }}>
+              {opt.label} <span style={{ opacity: 0.6, marginLeft: 4 }}>· {opt.count}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="main-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 16, marginBottom: 16 }}>
+          <div className="panel" style={{ padding: 12, overflow: 'hidden' }}>
+            {!priceData ? (
+              <div style={{ height: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12, padding: 24, textAlign: 'center' }}>
+                <Activity size={48} color="#334155"/>
+                <div className="font-display" style={{ fontSize: 22, fontStyle: 'italic', color: '#64748b' }}>Sin datos cargados</div>
+                <div className="font-mono" style={{ fontSize: 11, color: '#475569', letterSpacing: 1.5, maxWidth: 400 }}>
+                  CORRÉ EL APPS SCRIPT, COPIÁ EL JSON, Y PEGALO CON "PEGAR DATOS"
+                </div>
+              </div>
+            ) : validRrgData.length === 0 ? (
+              <div style={{ height: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+                <AlertCircle size={48} color="#475569"/>
+                <div className="font-display" style={{ fontSize: 18, fontStyle: 'italic', color: '#94a3b8' }}>Datos insuficientes</div>
+                <div className="font-mono" style={{ fontSize: 11, color: '#64748b', letterSpacing: 1, textAlign: 'center', maxWidth: 400 }}>
+                  Necesitás al menos {smoothing + momPeriod + 1} puntos.
+                </div>
+              </div>
+            ) : (
+              <React.Fragment>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', padding: '4px 4px 12px 4px', borderBottom: '1px solid rgba(148,163,184,0.1)', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="font-mono" style={{ fontSize: 10, letterSpacing: 1.5, color: '#64748b', fontWeight: 700 }}>CUADRANTE</span>
+                    <div style={{ display: 'flex', gap: 2, padding: 2, background: 'rgba(2,6,23,0.5)', borderRadius: 6, border: '1px solid rgba(148,163,184,0.12)' }}>
+                      {[
+                        { id: 'ALL',       label: 'TODOS', color: '#94a3b8', count: validRrgData.length },
+                        { id: 'LEADING',   label: 'LIDERANDO',  color: '#10b981', count: grouped.LEADING.length },
+                        { id: 'IMPROVING', label: 'MEJORANDO',  color: '#06b6d4', count: grouped.IMPROVING.length },
+                        { id: 'WEAKENING', label: 'DEBILITANDO', color: '#f59e0b', count: grouped.WEAKENING.length },
+                        { id: 'LAGGING',   label: 'REZAGADO',   color: '#ef4444', count: grouped.LAGGING.length },
+                      ].map(opt => {
+                        const active = chartQuadrant === opt.id;
+                        return (
+                          <button key={opt.id} onClick={() => setChartQuadrant(opt.id)} className="font-mono btn"
+                            style={{
+                              padding: '5px 10px',
+                              background: active ? opt.color : 'transparent',
+                              color: active ? '#0f172a' : '#94a3b8',
+                              border: 'none', borderRadius: 4,
+                              fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: 'pointer',
+                              opacity: opt.count === 0 && opt.id !== 'ALL' ? 0.4 : 1,
+                            }}
+                            disabled={opt.count === 0 && opt.id !== 'ALL'}>
+                            {opt.label} <span style={{ opacity: 0.7, marginLeft: 2 }}>· {opt.count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="font-mono" style={{ fontSize: 10, letterSpacing: 1.5, color: '#64748b', fontWeight: 700 }}>ETIQUETAS</span>
+                    <div style={{ display: 'flex', gap: 2, padding: 2, background: 'rgba(2,6,23,0.5)', borderRadius: 6, border: '1px solid rgba(148,163,184,0.12)' }}>
+                      {[
+                        { id: true,  label: 'TODAS' },
+                        { id: false, label: 'SOLO HOVER' },
+                      ].map(opt => {
+                        const active = showAllLabels === opt.id;
+                        return (
+                          <button key={String(opt.id)} onClick={() => setShowAllLabels(opt.id)} className="font-mono btn"
+                            style={{
+                              padding: '5px 10px',
+                              background: active ? '#10b981' : 'transparent',
+                              color: active ? '#022c22' : '#94a3b8',
+                              border: 'none', borderRadius: 4,
+                              fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: 'pointer',
+                            }}>
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {pinned.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="font-mono" style={{ fontSize: 10, letterSpacing: 1.5, color: '#f8fafc', fontWeight: 700 }}>FIJADOS · {pinned.length}</span>
+                      <button onClick={clearPins} className="font-mono btn"
+                        style={{ padding: '5px 10px', background: 'transparent', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.25)', borderRadius: 4, fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <X size={11}/> LIMPIAR
+                      </button>
+                    </div>
+                  )}
+
+                  {chartQuadrant !== 'ALL' && (
+                    <div className="font-mono" style={{ fontSize: 10, color: '#64748b', letterSpacing: 1, marginLeft: 'auto' }}>
+                      ZOOM AL CUADRANTE · {chartData.length} TICKERS
+                    </div>
+                  )}
+                </div>
+                <RRGChart rrgData={chartData} hoveredSymbol={hoveredSymbol} onHover={setHoveredSymbol}
+                  pinned={pinned} onTogglePin={togglePin} onClearPins={clearPins}
+                  quadrantFilter={chartQuadrant} showAllLabels={showAllLabels}/>
+              </React.Fragment>
+            )}
+          </div>
+
+          <div className="panel" style={{ padding: 16, display: 'flex', flexDirection: 'column' }}>
+            <div className="font-mono" style={{ fontSize: 10, letterSpacing: 2, color: '#94a3b8', fontWeight: 700, marginBottom: 12 }}>POR CUADRANTE</div>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {['LEADING', 'IMPROVING', 'WEAKENING', 'LAGGING'].map(q => (
+                <div key={q}>
+                  <div className="quad-pill" style={{ background: QUADRANTS[q].color + '22', color: QUADRANTS[q].color, marginBottom: 8 }}>
+                    {QUADRANTS[q].label} · {grouped[q].length}
+                  </div>
+                  {grouped[q].length === 0 ? (
+                    <div className="font-mono" style={{ fontSize: 10, color: '#475569', paddingLeft: 4 }}>—</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {grouped[q].map(t => {
+                        const info = SECTOR_INFO[t.symbol] || null;
+                        const isPinned = pinned.includes(t.symbol);
+                        return (
+                          <div key={t.symbol}
+                            onMouseEnter={() => setHoveredSymbol(t.symbol)} onMouseLeave={() => setHoveredSymbol(null)}
+                            onClick={() => togglePin(t.symbol)}
+                            title={isPinned ? 'Click para soltar' : 'Click para fijar'}
+                            style={{ padding: '6px 8px', background: isPinned ? 'rgba(248,250,252,0.10)' : (hoveredSymbol === t.symbol ? 'rgba(148,163,184,0.08)' : 'transparent'), border: isPinned ? '1px solid rgba(248,250,252,0.25)' : '1px solid transparent', borderRadius: 4, cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ width: 8, height: 8, borderRadius: '50%', background: t.color, boxShadow: isPinned ? '0 0 0 2px #f8fafc' : 'none' }}/>
+                                <span className="font-mono" style={{ fontSize: 12, fontWeight: 600 }}>{t.symbol}</span>
+                                {info && (
+                                  <span style={{ fontSize: 10, color: '#94a3b8', fontStyle: 'italic' }}>{info.name}</span>
+                                )}
+                              </div>
+                              <div className="font-mono" style={{ fontSize: 10, color: '#64748b' }}>
+                                {t.current.rsRatio.toFixed(2)} · {t.current.rsMomentum.toFixed(2)}
+                              </div>
+                            </div>
+                            {info && (
+                              <div style={{ marginTop: 4, paddingLeft: 16, fontSize: 9.5, color: '#64748b', lineHeight: 1.4 }}>
+                                <div>{info.desc}</div>
+                                <div className="font-mono" style={{ marginTop: 2, color: '#475569' }}>
+                                  TOP: <span style={{ color: '#64748b' }}>{info.top.join(' · ')}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            {missingTickers.length > 0 && (
+              <div style={{ marginTop: 12, padding: 8, background: 'rgba(245,158,11,0.08)', borderRadius: 6, border: '1px solid rgba(245,158,11,0.2)' }}>
+                <div className="font-mono" style={{ fontSize: 10, color: '#fbbf24', letterSpacing: 1, fontWeight: 700 }}>SIN DATOS</div>
+                <div className="font-mono" style={{ fontSize: 10, color: '#fcd34d', marginTop: 2 }}>{missingTickers.join(', ')}</div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="panel" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div className="font-mono" style={{ fontSize: 10, letterSpacing: 2, color: '#94a3b8', fontWeight: 700 }}>GESTIONAR {view === 'sectors' ? 'SECTORES' : 'STOCKS'}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input type="text" value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
+                onKeyDown={e => { if (e.key === 'Enter') addTicker(); }} placeholder="TICKER"
+                className="font-mono input-base" style={{ width: 100, fontWeight: 600, letterSpacing: 1 }}/>
+              <button onClick={addTicker} className="btn font-mono"
+                style={{ padding: '6px 12px', background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 6, fontWeight: 700, fontSize: 11, letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                <Plus size={12}/> AGREGAR
+              </button>
+              <button onClick={resetTickers} className="btn font-mono"
+                title={`Restaurar lista de ${view === 'sectors' ? 'sectores' : 'stocks'} al original`}
+                style={{ padding: '6px 12px', fontSize: 11, letterSpacing: 1.5, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                <RefreshCw size={12}/> RESTAURAR LISTA
+              </button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {activeTickers.map(t => (
+              <div key={t.symbol} className="font-mono"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'rgba(30,41,59,0.6)', border: '1px solid rgba(148,163,184,0.15)', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                {t.symbol}
+                <button onClick={() => removeTicker(t.symbol)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                  <X size={11}/>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="panel" style={{ padding: 16 }}>
+          <button onClick={() => setShowMethodology(!showMethodology)}
+            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: 0, width: '100%', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Info size={14}/>
+              <span className="font-mono" style={{ fontSize: 11, letterSpacing: 2, fontWeight: 700 }}>METODOLOGÍA</span>
+            </div>
+            {showMethodology ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+          </button>
+          {showMethodology && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(148,163,184,0.1)', fontSize: 13, color: '#cbd5e1', lineHeight: 1.6 }}>
+              <p style={{ margin: '0 0 4px 0' }}><strong className="font-mono" style={{ color: '#10b981', fontSize: 11, letterSpacing: 1.5 }}>FÓRMULAS</strong></p>
+              <p style={{ marginBottom: 12, marginTop: 0 }}>
+                · <span className="font-mono">RS = (Activo / SPY) × 100</span><br/>
+                · <span className="font-mono">RS-Ratio = 100 + ((RS / SMA(RS, {smoothing})) − 1) × 100</span><br/>
+                · <span className="font-mono">RS-Momentum = 100 + ((RS-Ratio[t] / RS-Ratio[t−{momPeriod}]) − 1) × 100</span>
+              </p>
+              <p style={{ margin: 0, fontSize: 12, color: '#94a3b8' }}>
+                Aproximación open-source del modelo JdK. Las preferencias se guardan en localStorage del navegador.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="font-mono" style={{ textAlign: 'center', fontSize: 10, color: '#475569', marginTop: 20, letterSpacing: 1.5 }}>
+          {validRrgData.length} tickers activos · benchmark {BENCHMARK}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Render
+document.getElementById('loading').style.display = 'none';
+ReactDOM.createRoot(document.getElementById('root')).render(<RRGDashboard/>);
+</script>
+</body>
+</html>
