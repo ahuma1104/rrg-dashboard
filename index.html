@@ -114,9 +114,12 @@ const DEFAULT_SECTORS = [
   { symbol: 'COPX', name: 'Copper Miners' },
   // ETFs agregados 12/06/2026: espacio, aero/defensa, semis
   { symbol: 'SOXX', name: 'Semis ETF (iShares)' },
+  { symbol: 'SMH',  name: 'Semis ETF (VanEck)' },
   { symbol: 'UFO',  name: 'Espacio (Procure)' },
   { symbol: 'ITA',  name: 'Aero & Defensa (iShares)' },
   { symbol: 'NASA', name: 'Espacio (Tema)' },
+  // País
+  { symbol: 'EWZ',  name: 'Brasil (iShares)' },
 ];
 
 const DEFAULT_STOCKS = [
@@ -146,7 +149,6 @@ const DEFAULT_STOCKS = [
   { symbol: 'IBM',  name: 'IBM' },
   { symbol: 'HIMS', name: 'Hims & Hers' },
   { symbol: 'ASML', name: 'ASML' },
-  { symbol: 'SMH',  name: 'Semis ETF (VanEck)' },
   { symbol: 'QTUM', name: 'Quantum ETF (Defiance)' },
   { symbol: 'EWY',  name: 'Corea del Sur (iShares)' },
   { symbol: 'BTC-USD', name: 'Bitcoin' },
@@ -177,11 +179,13 @@ const SECTOR_INFO = {
   COPX: { name: 'Copper Miners (Global X)', desc: 'Mineras de cobre globales. Termómetro de demanda industrial y transición energética', top: ['SCCO', 'FCX', 'BHP', 'TECK', 'ANTO'] },
   // Países
   EWY:  { name: 'Corea del Sur (iShares)', desc: 'Acciones grandes y medianas de Corea. Muy cargado en semis (Samsung, SK Hynix); proxy del ciclo de memorias y del mercado coreano', top: ['Samsung Elec', 'SK Hynix', 'Samsung Bio', 'Hyundai', 'LG Energy'] },
+  EWZ:  { name: 'Brasil (iShares)', desc: 'Acciones grandes de Brasil. Pesado en materias primas (Vale/Petrobras) y bancos; sensible al real, commodities y tasas. NU es top-2 (la misma que seguís suelta)', top: ['VALE', 'NU', 'ITUB', 'PETR', 'BBDC'] },
   // ETFs aeroespacial / espacio / semis (agregados 12/06/2026)
+  SMH:  { name: 'Semis ETF (VanEck)', desc: 'Semiconductores (VanEck). Concentrado en megacaps: NVDA pesa ~18% del fondo. Gemelo de SOXX pero más top-heavy', top: ['NVDA', 'TSM', 'MU', 'AVGO', 'AMD'] },
   SOXX: { name: 'Semis ETF (iShares)', desc: 'Semiconductores (iShares). Casi un gemelo de SMH, los mismos chips grandes', top: ['NVDA', 'AVGO', 'AMD', 'TXN', 'QCOM'] },
-  UFO:  { name: 'Espacio (Procure)', desc: 'Espacio puro: satélites, lanzadores y comunicaciones espaciales. Tiene años de historia', top: ['RKLB', 'MDA', 'VSAT', 'ASTS', 'PL'] },
-  ITA:  { name: 'Aero & Defensa (iShares)', desc: 'Aeroespacial y defensa USA: los grandes contratistas militares', top: ['RTX', 'BA', 'LMT', 'GE', 'NOC'] },
-  NASA: { name: 'Espacio (Tema)', desc: 'Economía espacial (Tema). Activo, incluye SpaceX vía vehículo privado. Muy nuevo (mar-2026)', top: ['RKLB', 'MDA', 'SATS', 'SpaceX (SPV)', 'PL'] },
+  UFO:  { name: 'Espacio (Procure)', desc: 'Espacio puro: satélites, lanzadores y comms. Sumó SpaceX (SPCX) como 1ª tenencia tras la IPO. Bien repartido (top 10 ~47%)', top: ['SPCX', 'GRMN', 'RKLB', 'TRMB', 'SIRI'] },
+  ITA:  { name: 'Aero & Defensa (iShares)', desc: 'Aeroespacial y defensa USA. Muy concentrado: GE+RTX+BA ~46% del fondo. La señal del ETF la manda GE', top: ['GE', 'RTX', 'BA', 'HWM', 'TDG'] },
+  NASA: { name: 'Espacio (Tema)', desc: 'Economía espacial (Tema), gestión activa. Muy pesado en Rocket Lab + SpaceX (vía SPV, ~10% c/u). El único space ETF con SpaceX de peso', top: ['RKLB', 'SPCX', 'PL', 'LUNR', 'FLY'] },
 };
 
 const TICKER_COLORS = [
