@@ -152,6 +152,17 @@ const DEFAULT_STOCKS = [
   { symbol: 'QTUM', name: 'Quantum ETF (Defiance)' },
   { symbol: 'EWY',  name: 'Corea del Sur (iShares)' },
   { symbol: 'BTC-USD', name: 'Bitcoin' },
+  // Agregados 11/07/2026: sincronización con dashboard de volumen
+  { symbol: 'UBER', name: 'Uber' },
+  { symbol: 'ADBE', name: 'Adobe' },
+  { symbol: 'ACN',  name: 'Accenture' },
+  { symbol: 'NBIS', name: 'Nebius Group' },
+  { symbol: 'NEM',  name: 'Newmont' },
+  { symbol: 'XP',   name: 'XP Inc.' },
+  { symbol: 'BBD',  name: 'Banco Bradesco' },
+  { symbol: 'MOS',  name: 'Mosaic' },
+  { symbol: 'SAN',  name: 'Santander (España)' },
+  { symbol: 'SAP',  name: 'SAP' },
 ];
 
 // Info de cada SPDR Sector ETF: nombre, qué cubre, top 5 holdings
@@ -623,16 +634,52 @@ function RRGDashboard() {
   const copyResumen = async () => {
     const order = ['LEADING', 'IMPROVING', 'WEAKENING', 'LAGGING'];
     const emoji = { LEADING: '🟢', IMPROVING: '🔵', WEAKENING: '🟡', LAGGING: '🔴' };
-    const head = `📊 RRG · ${view === 'sectors' ? 'SECTORES' : 'STOCKS'} vs ${BENCHMARK}\n${priceData?.weekEnding?.length || 0} semanas · ${formatTimestamp(lastUpdate)}`;
-    const blocks = order.map(q => {
-      const list = grouped[q];
+    const bench = priceData?.prices?.[BENCHMARK];
+
+    // Agrupa por cuadrante una lista de tickers dada (sectores o stocks),
+    // calculando su RRG con los parámetros activos. Independiente de la pestaña.
+    const agruparUniverso = (lista) => {
+      const g = { LEADING: [], IMPROVING: [], WEAKENING: [], LAGGING: [] };
+      if (!bench) return g;
+      lista.forEach(t => {
+        const prices = priceData.prices[t.symbol];
+        if (!prices) return;
+        const series = calculateRRG(prices, bench, smoothing, momPeriod);
+        if (!series || !series.length) return;
+        const current = series[series.length - 1];
+        const q = getQuadrant(current.rsRatio, current.rsMomentum);
+        g[q].push({ symbol: t.symbol, rsRatio: current.rsRatio, rsMomentum: current.rsMomentum });
+      });
+      return g;
+    };
+
+    const bloquesDe = (g) => order.map(q => {
+      const list = g[q];
       const title = `${emoji[q]} ${QUADRANTS[q].label} (${list.length})`;
       if (!list.length) return title + '\n—';
-      const sorted = [...list].sort((a, b) => b.current.rsRatio - a.current.rsRatio);
-      const lines = sorted.map(t => `• ${t.symbol}  ${t.current.rsRatio.toFixed(1)} · ${t.current.rsMomentum.toFixed(1)}`);
+      const sorted = [...list].sort((a, b) => b.rsRatio - a.rsRatio);
+      const lines = sorted.map(t => `• ${t.symbol}  ${t.rsRatio.toFixed(1)} · ${t.rsMomentum.toFixed(1)}`);
       return title + '\n' + lines.join('\n');
-    });
-    const text = head + '\n\n' + blocks.join('\n\n') + '\n\n(RS-Ratio · RS-Momentum)';
+    }).join('\n\n');
+
+    const gSectores = agruparUniverso(sectors);
+    const gStocks   = agruparUniverso(stocks);
+    const sep = '═══════════════════';
+    const semanas = priceData?.weekEnding?.length || 0;
+
+    const text =
+      `📊 *RRG · SECTORES & STOCKS vs ${BENCHMARK}*\n` +
+      `${semanas} semanas · ${formatTimestamp(lastUpdate)}\n` +
+      `${sep}\n` +
+      `*SECTORES / ETFs*\n\n` +
+      bloquesDe(gSectores) + '\n' +
+      `${sep}\n` +
+      `*STOCKS*\n\n` +
+      bloquesDe(gStocks) + '\n' +
+      `${sep}\n` +
+      `(RS-Ratio · RS-Momentum)\n` +
+      `⚠️ Análisis técnico, NO recomendación de inversión.`;
+
     try {
       await navigator.clipboard.writeText(text);
       setResumenOk(true);
